@@ -55,8 +55,8 @@ const translateHtml = async ({ html, toLang, apiKey }) => {
 const translateBlocks = async ({ blocks, toLang, apiKey }) =>
   await Promise.all(
     blocks.map(async block => {
-      const ttext = await translate({ text: block.text, toLang, apiKey });
-      return { ...block, text: ttext };
+      const text = await translate({ text: block.text, toLang, apiKey });
+      return { ...block, text };
     })
   );
 
@@ -144,15 +144,15 @@ export class Translated extends React.Component<Props> {
     }
   };
 
-  async componentDidMount() {
-    await this.translateChildren(this.props);
+  componentDidMount() {
+    this.translateChildren(this.props);
   }
 
-  async componentWillReceiveProps(nextProps) {
-    if (this.props.children !== nextProps.children) {
-      await this.translateChildren(nextProps);
-    }
-  }
+  // componentWillReceiveProps(nextProps) {
+  //   if (this.props.children !== nextProps.children) {
+  //     this.translateChildren(nextProps);
+  //   }
+  // }
 
   /*  
    componentDidUpdate causes "Component exceeded time limit" 
@@ -161,11 +161,11 @@ export class Translated extends React.Component<Props> {
    getDerivedStateFromProps isn't meant for data fetching.
    What to do here?
   */
-  // componentDidUpdate(prevProps) {
-  //   if (this.props.children !== prevProps.children) {
-  //     this.translateChildren(this.props);
-  //   }
-  // }
+  componentDidUpdate(prevProps) {
+    if (this.props.children !== prevProps.children) {
+      this.translateChildren(this.props);
+    }
+  }
 
   render() {
     const { root, error, loading } = this.state;
