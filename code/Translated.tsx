@@ -55,55 +55,59 @@ const translateHtml = async ({ html, toLang, apiKey }) => {
 const translateBlocks = async ({ blocks, toLang, apiKey }) =>
   await Promise.all(
     blocks.map(async block => {
-      const text = await translate({ text: block.text, toLang, apiKey });
-      return { ...block, text };
+      const ttext = await translate({ text: block.text, toLang, apiKey });
+      return { ...block, text: ttext };
     })
   );
 
-const cloneAndUpdatePropsAsync = async (getUpdatePropsFun, node) => {
-  if (!React.isValidElement(node)) return node;
-  const updateProps = await getUpdatePropsFun(node);
-  const clonedChildren = await Promise.all(
-    React.Children.map(
-      node.props.children,
-      async c => await cloneAndUpdatePropsAsync(getUpdatePropsFun, c)
-    )
-  );
-  return React.cloneElement(node, updateProps, clonedChildren);
-};
-
-const cloneAndTranslate = async ({ root, toLang, apiKey }) => {
-  const getTranslatedProps = async e => {
-    const { rawHTML, contentState, text } = e.props;
-    let propsToUpdate = null;
-    if (rawHTML) {
-      const translatedHtml = await translateHtml({
-        html: rawHTML,
-        toLang,
-        apiKey
-      });
-      propsToUpdate = { rawHTML: translatedHtml };
-    } else if (contentState) {
-      // Text inside a component instance seems to have a contentState
-      const { blocks } = contentState;
-      if (blocks && blocks.length > 0) {
-        const translatedBlocks = await translateBlocks({
-          blocks,
+const cloneAndTranslateElements = async ({ elements = [], toLang, apiKey }) =>
+  await Promise.all(
+    elements.map(async e => {
+      const { rawHTML, contentState, text } = e.props;
+      let propsToUpdate = null;
+      if (rawHTML) {
+        const translatedHtml = await translateHtml({
+          html: rawHTML,
           toLang,
           apiKey
         });
-        propsToUpdate = {
-          contentState: { ...contentState, blocks: translatedBlocks }
-        };
+        propsToUpdate = { rawHTML: translatedHtml };
+      } else if (contentState) {
+        // Text inside a component instance seems to have a contentState
+        const { blocks } = contentState;
+        if (blocks && blocks.length > 0) {
+          const translatedBlocks = await translateBlocks({
+            blocks,
+            toLang,
+            apiKey
+          });
+          propsToUpdate = {
+            contentState: { ...contentState, blocks: translatedBlocks }
+          };
+        }
+      } else if (typeof text === "string") {
+        const translated = await translate({ text, toLang, apiKey });
+        propsToUpdate = { text: translated };
       }
-    } else if (typeof text === "string") {
-      const translated = await translate({ text, toLang, apiKey });
-      propsToUpdate = { text: translated };
-    }
-    return propsToUpdate;
-  };
-  return await cloneAndUpdatePropsAsync(getTranslatedProps, root);
-};
+      return await cloneAndTranslate({
+        root: e,
+        props: propsToUpdate,
+        toLang,
+        apiKey
+      });
+    })
+  );
+
+const cloneAndTranslate = async ({ root, props = null, toLang, apiKey }) =>
+  React.cloneElement(
+    root,
+    props,
+    await cloneAndTranslateElements({
+      elements: React.Children.toArray(root.props.children),
+      toLang,
+      apiKey
+    })
+  );
 
 export class Translated extends React.Component<Props> {
   // Set default properties
@@ -144,15 +148,15 @@ export class Translated extends React.Component<Props> {
     }
   };
 
-  componentDidMount() {
-    this.translateChildren(this.props);
+  async componentDidMount() {
+    await this.translateChildren(this.props);
   }
 
-  // componentWillReceiveProps(nextProps) {
-  //   if (this.props.children !== nextProps.children) {
-  //     this.translateChildren(nextProps);
-  //   }
-  // }
+  async componentWillReceiveProps(nextProps) {
+    if (this.props.children !== nextProps.children) {
+      await this.translateChildren(nextProps);
+    }
+  }
 
   /*  
    componentDidUpdate causes "Component exceeded time limit" 
@@ -161,11 +165,11 @@ export class Translated extends React.Component<Props> {
    getDerivedStateFromProps isn't meant for data fetching.
    What to do here?
   */
-  componentDidUpdate(prevProps) {
-    if (this.props.children !== prevProps.children) {
-      this.translateChildren(this.props);
-    }
-  }
+  // componentDidUpdate(prevProps) {
+  //   if (this.props.children !== prevProps.children) {
+  //     this.translateChildren(this.props);
+  //   }
+  // }
 
   render() {
     const { root, error, loading } = this.state;
