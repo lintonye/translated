@@ -151,11 +151,11 @@ export class Translated extends React.Component<Props> {
     this.translateChildren(this.props);
   }
 
-  // componentWillReceiveProps(nextProps) {
-  //   if (this.props.children !== nextProps.children) {
-  //     this.translateChildren(nextProps);
-  //   }
-  // }
+  componentWillReceiveProps(nextProps) {
+    if (this.props.children !== nextProps.children) {
+      this.translateChildren(nextProps);
+    }
+  }
 
   /*  
    componentDidUpdate causes "Component exceeded time limit" 
@@ -164,11 +164,11 @@ export class Translated extends React.Component<Props> {
    getDerivedStateFromProps isn't meant for data fetching.
    What to do here?
   */
-  componentDidUpdate(prevProps) {
-    if (this.props.children !== prevProps.children) {
-      this.translateChildren(this.props);
-    }
-  }
+  // componentDidUpdate(prevProps) {
+  //   if (this.props.children !== prevProps.children) {
+  //     this.translateChildren(this.props);
+  //   }
+  // }
 
   render() {
     const { root, error, loading } = this.state;
