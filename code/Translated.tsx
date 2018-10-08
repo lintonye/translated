@@ -63,9 +63,12 @@ const translateBlocks = async ({ blocks, toLang, apiKey }) =>
 const cloneAndUpdatePropsAsync = async (getUpdatePropsFun, node) => {
   if (!React.isValidElement(node)) return node;
   const updateProps = await getUpdatePropsFun(node);
+  /**
+   * TODO: why React.Children.map will cause an error on the canvas
+   * But NOT in preview?
+   */
   const clonedChildren = await Promise.all(
-    React.Children.map(
-      node.props.children,
+    React.Children.toArray(node.props.children).map(
       async c => await cloneAndUpdatePropsAsync(getUpdatePropsFun, c)
     )
   );
