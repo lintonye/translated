@@ -5,6 +5,7 @@ import { translate } from "./translate";
 // Define type of property
 interface Props {
   toLang: string;
+  translationService: "google" | "yandex";
   apiKey: string;
 }
 
@@ -27,7 +28,7 @@ const Message = ({ title, description }) => (
   </div>
 );
 
-const translateHtml = async ({ html, toLang, apiKey }) => {
+const translateHtml = async ({ html, toLang, apiKey, translationService }) => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
   const root = doc.body.childNodes[0];
@@ -36,7 +37,8 @@ const translateHtml = async ({ html, toLang, apiKey }) => {
       const translated = await translate({
         text: node.textContent,
         toLang,
-        apiKey
+        apiKey,
+        translationService
       });
       node.textContent = translated;
     } else {
@@ -52,10 +54,20 @@ const translateHtml = async ({ html, toLang, apiKey }) => {
   return s.serializeToString(root);
 };
 
-const translateBlocks = async ({ blocks, toLang, apiKey }) =>
+const translateBlocks = async ({
+  blocks,
+  toLang,
+  apiKey,
+  translationService
+}) =>
   await Promise.all(
     blocks.map(async block => {
-      const text = await translate({ text: block.text, toLang, apiKey });
+      const text = await translate({
+        text: block.text,
+        toLang,
+        apiKey,
+        translationService
+      });
       return { ...block, text };
     })
   );
@@ -75,7 +87,12 @@ const cloneAndUpdatePropsAsync = async (getUpdatePropsFun, node) => {
   return React.cloneElement(node, updateProps, clonedChildren);
 };
 
-const cloneAndTranslate = async ({ root, toLang, apiKey }) => {
+const cloneAndTranslate = async ({
+  root,
+  toLang,
+  apiKey,
+  translationService
+}) => {
   const getTranslatedProps = async e => {
     const { rawHTML, contentState, text } = e.props;
     let propsToUpdate = null;
@@ -83,7 +100,8 @@ const cloneAndTranslate = async ({ root, toLang, apiKey }) => {
       const translatedHtml = await translateHtml({
         html: rawHTML,
         toLang,
-        apiKey
+        apiKey,
+        translationService
       });
       propsToUpdate = { rawHTML: translatedHtml };
     } else if (contentState) {
@@ -93,14 +111,20 @@ const cloneAndTranslate = async ({ root, toLang, apiKey }) => {
         const translatedBlocks = await translateBlocks({
           blocks,
           toLang,
-          apiKey
+          apiKey,
+          translationService
         });
         propsToUpdate = {
           contentState: { ...contentState, blocks: translatedBlocks }
         };
       }
     } else if (typeof text === "string") {
-      const translated = await translate({ text, toLang, apiKey });
+      const translated = await translate({
+        text,
+        toLang,
+        apiKey,
+        translationService
+      });
       propsToUpdate = { text: translated };
     }
     return propsToUpdate;
@@ -112,12 +136,24 @@ export class Translated extends React.Component<Props> {
   // Set default properties
   static defaultProps = {
     toLang: "zh",
+    translationService: "yandex",
     apiKey:
       "trnsl.1.1.20181003T054221Z.d2be70eac0925141.2897bc6cbf06ec637dd4e072f89eeaa6f1c0d792"
   };
 
   // Items shown in property panel
   static propertyControls: PropertyControls = {
+    translationService: {
+      type: ControlType.SegmentedEnum,
+      title: "Service",
+      options: ["google", "yandex"],
+      optionTitles: ["Google", "Yandex"]
+    },
+    apiKey: {
+      type: ControlType.String,
+      title: "API Key",
+      hidden: ({ translationService }) => translationService === "yandex"
+    },
     toLang: { type: ControlType.String, title: "Translate to" }
   };
 
@@ -132,12 +168,17 @@ export class Translated extends React.Component<Props> {
   }
 
   translateChildren = async props => {
-    const { children, toLang, apiKey } = props;
+    const { children, toLang, apiKey, translationService } = props;
     const root = children[0];
     if (root) {
       try {
         this.setState({ loading: true });
-        const clonedRoot = await cloneAndTranslate({ root, toLang, apiKey });
+        const clonedRoot = await cloneAndTranslate({
+          root,
+          toLang,
+          apiKey,
+          translationService
+        });
         this.setState({ root: clonedRoot, loading: false });
       } catch (error) {
         this.setState({ error, loading: false });
@@ -180,12 +221,15 @@ export class Translated extends React.Component<Props> {
         <Message title="Translating..." description="Wait a split second." />
       );
     } else if (root) {
+      const isFreeYandex = this.props.translationService === "yandex";
       return (
         <Frame {...this.props} background={null}>
-          <div style={yandexTitleStyle}>
-            Powered by{" "}
-            <a href="http://translate.yandex.com/">Yandex.Translate</a>
-          </div>
+          {isFreeYandex && (
+            <div style={yandexTitleStyle}>
+              Powered by{" "}
+              <a href="http://translate.yandex.com/">Yandex.Translate</a>
+            </div>
+          )}
           {root}
         </Frame>
       );
