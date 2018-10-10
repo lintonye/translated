@@ -1,6 +1,7 @@
 import * as React from "react";
 import { PropertyControls, ControlType, Frame } from "framer";
 import { translate } from "./translate";
+import StaggeredCloner from "./StaggeredCloner";
 
 // Define type of property
 interface Props {
@@ -60,24 +61,27 @@ const translateBlocks = async ({ blocks, toLang, apiKey }) =>
     })
   );
 
-const cloneAndUpdatePropsAsync = async (getUpdatePropsFun, node) => {
-  if (!React.isValidElement(node)) return node;
-  const updateProps = await getUpdatePropsFun(node);
-  /**
-   * TODO: why React.Children.map will cause an error on the canvas
-   * But NOT in preview?
-   */
-  const clonedChildren = await Promise.all(
-    React.Children.toArray(node.props.children).map(
-      async c => await cloneAndUpdatePropsAsync(getUpdatePropsFun, c)
-    )
-  );
-  return React.cloneElement(node, updateProps, clonedChildren);
-};
+export class Translated extends React.Component<Props> {
+  // Set default properties
+  static defaultProps = {
+    toLang: "zh",
+    apiKey:
+      "trnsl.1.1.20181003T054221Z.d2be70eac0925141.2897bc6cbf06ec637dd4e072f89eeaa6f1c0d792"
+  };
 
-const cloneAndTranslate = async ({ root, toLang, apiKey }) => {
-  const getTranslatedProps = async e => {
-    const { rawHTML, contentState, text } = e.props;
+  // Items shown in property panel
+  static propertyControls: PropertyControls = {
+    toLang: { type: ControlType.String, title: "Translate to" }
+  };
+
+  state = {
+    error: null,
+    loading: false
+  };
+
+  translateProps = async propsOnChild => {
+    const { toLang, apiKey } = this.props;
+    const { rawHTML, contentState, text } = propsOnChild;
     let propsToUpdate = null;
     if (rawHTML) {
       const translatedHtml = await translateHtml({
@@ -105,73 +109,10 @@ const cloneAndTranslate = async ({ root, toLang, apiKey }) => {
     }
     return propsToUpdate;
   };
-  return await cloneAndUpdatePropsAsync(getTranslatedProps, root);
-};
-
-export class Translated extends React.Component<Props> {
-  // Set default properties
-  static defaultProps = {
-    toLang: "zh",
-    apiKey:
-      "trnsl.1.1.20181003T054221Z.d2be70eac0925141.2897bc6cbf06ec637dd4e072f89eeaa6f1c0d792"
-  };
-
-  // Items shown in property panel
-  static propertyControls: PropertyControls = {
-    toLang: { type: ControlType.String, title: "Translate to" }
-  };
-
-  state = {
-    root: null,
-    error: null,
-    loading: false
-  };
-
-  shouldComponentUpdate(nextProps, nextState) {
-    return nextProps !== this.props || nextState !== this.state;
-  }
-
-  translateChildren = async props => {
-    const { children, toLang, apiKey } = props;
-    const root = children[0];
-    if (root) {
-      try {
-        this.setState({ loading: true });
-        const clonedRoot = await cloneAndTranslate({ root, toLang, apiKey });
-        this.setState({ root: clonedRoot, loading: false });
-      } catch (error) {
-        this.setState({ error, loading: false });
-      }
-    } else {
-      this.setState({ root: null });
-    }
-  };
-
-  componentDidMount() {
-    this.translateChildren(this.props);
-  }
-
-  componentWillReceiveProps(nextProps) {
-    if (this.props.children !== nextProps.children) {
-      this.translateChildren(nextProps);
-    }
-  }
-
-  /*  
-   componentDidUpdate causes "Component exceeded time limit" 
-   error way too often. componentWillReceiveProps performs
-   better. However it'll soon be deprecated. 
-   getDerivedStateFromProps isn't meant for data fetching.
-   What to do here?
-  */
-  // componentDidUpdate(prevProps) {
-  //   if (this.props.children !== prevProps.children) {
-  //     this.translateChildren(this.props);
-  //   }
-  // }
 
   render() {
-    const { root, error, loading } = this.state;
+    const { error, loading } = this.state;
+    const { children } = this.props;
 
     if (!!error) {
       return <Message title="Error" description={error} />;
@@ -179,14 +120,16 @@ export class Translated extends React.Component<Props> {
       return (
         <Message title="Translating..." description="Wait a split second." />
       );
-    } else if (root) {
+    } else if (children[0]) {
       return (
         <Frame {...this.props} background={null}>
           <div style={yandexTitleStyle}>
             Powered by{" "}
             <a href="http://translate.yandex.com/">Yandex.Translate</a>
           </div>
-          {root}
+          <StaggeredCloner onUpdateProps={this.translateProps}>
+            {children}
+          </StaggeredCloner>
         </Frame>
       );
     } else {
